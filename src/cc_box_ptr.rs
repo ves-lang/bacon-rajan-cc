@@ -8,8 +8,8 @@
 // copied, modified, or distributed except according to those terms.
 
 use super::{CcBoxData, Color};
-use trace::Trace;
 use std::ptr::NonNull;
+use trace::Trace;
 
 /// A trait to group all of the operations we need to be able to do on
 /// `CcBox<T>`'s, potentially across different T types.
@@ -19,16 +19,22 @@ pub trait CcBoxPtr: Trace {
 
     /// Get the color of this node.
     #[inline]
-    fn color(&self) -> Color { self.data().color.get() }
+    fn color(&self) -> Color {
+        self.data().color.get()
+    }
 
     /// Return true if this node is in the buffer of possible cycle roots, false
     /// otherwise.
     #[inline]
-    fn buffered(&self) -> bool { self.data().buffered.get() }
+    fn buffered(&self) -> bool {
+        self.data().buffered.get()
+    }
 
     /// Return the strong reference count.
     #[inline]
-    fn strong(&self) -> usize { self.data().strong.get() }
+    fn strong(&self) -> usize {
+        self.data().strong.get()
+    }
 
     /// Increment this node's strong reference count.
     #[inline]
@@ -39,20 +45,28 @@ pub trait CcBoxPtr: Trace {
 
     /// Decrement this node's strong reference count.
     #[inline]
-    fn dec_strong(&self) { self.data().strong.set(self.strong() - 1); }
+    fn dec_strong(&self) {
+        self.data().strong.set(self.strong() - 1);
+    }
 
     /// Get this node's weak reference count, including the "strong weak"
     /// reference.
     #[inline]
-    fn weak(&self) -> usize { self.data().weak.get() }
+    fn weak(&self) -> usize {
+        self.data().weak.get()
+    }
 
     /// Increment this node's weak reference count.
     #[inline]
-    fn inc_weak(&self) { self.data().weak.set(self.weak() + 1); }
+    fn inc_weak(&self) {
+        self.data().weak.set(self.weak() + 1);
+    }
 
     /// Decrement this node's weak reference count.
     #[inline]
-    fn dec_weak(&self) { self.data().weak.set(self.weak() - 1); }
+    fn dec_weak(&self) {
+        self.data().weak.set(self.weak() - 1);
+    }
 }
 
 /// Drop the boxed value and deallocate the box if possible.
@@ -65,7 +79,6 @@ pub unsafe fn free(mut s: NonNull<dyn CcBoxPtr>) {
     // Remove the implicit "strong weak" pointer now that we've destroyed
     // the contents.
     s.as_mut().dec_weak();
-
 
     if s.as_mut().weak() == 0 {
         crate::deallocate(s);

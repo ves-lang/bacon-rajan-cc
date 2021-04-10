@@ -164,18 +164,18 @@
 extern crate core;
 use core::cell::Cell;
 use core::clone::Clone;
-use core::cmp::{PartialEq, PartialOrd, Eq, Ord, Ordering};
+use core::cmp::{Eq, Ord, Ordering, PartialEq, PartialOrd};
 use core::default::Default;
 use core::fmt;
-use core::hash::{Hasher, Hash};
+use core::hash::{Hash, Hasher};
 use core::mem::forget;
-use std::ptr::NonNull;
 use core::ops::{Deref, Drop};
 use core::option::Option;
-use core::option::Option::{Some, None};
+use core::option::Option::{None, Some};
 use core::ptr;
 use core::result::Result;
-use core::result::Result::{Ok, Err};
+use core::result::Result::{Err, Ok};
+use std::ptr::NonNull;
 
 use std::alloc::{dealloc, Layout};
 
@@ -262,7 +262,7 @@ impl<T: Trace> Cc<T> {
                         weak: Cell::new(1),
                         buffered: Cell::new(false),
                         color: Cell::new(Color::Black),
-                    }
+                    },
                 }))),
             }
         }
@@ -312,7 +312,7 @@ impl<T: Trace> Cc<T> {
         }
 
         self.data().buffered.set(true);
-        let ptr : NonNull<dyn CcBoxPtr> = self._ptr;
+        let ptr: NonNull<dyn CcBoxPtr> = self._ptr;
         collect::add_root(ptr);
     }
 }
@@ -401,11 +401,15 @@ impl<T: 'static + Trace> Cc<T> {
 
     /// Get the number of strong references to this value.
     #[inline]
-    pub fn strong_count(&self) -> usize { self.strong() }
+    pub fn strong_count(&self) -> usize {
+        self.strong()
+    }
 
     /// Get the number of weak references to this value.
     #[inline]
-    pub fn weak_count(&self) -> usize { self.weak() - 1 }
+    pub fn weak_count(&self) -> usize {
+        self.weak() - 1
+    }
 }
 
 impl<T: 'static + Clone + Trace> Cc<T> {
@@ -444,9 +448,7 @@ impl<T: Trace> Deref for Cc<T> {
     #[inline(always)]
     fn deref(&self) -> &T {
         if self.strong_count() > 0 {
-            unsafe {
-                &self._ptr.as_ref().value
-            }
+            unsafe { &self._ptr.as_ref().value }
         } else {
             panic!("Invalid access during cycle collection");
         }
@@ -494,7 +496,6 @@ impl<T: Trace> Drop for Cc<T> {
 }
 
 impl<T: Trace> Clone for Cc<T> {
-
     /// Makes a clone of the `Cc<T>`.
     ///
     /// When you clone an `Cc<T>`, it will create another pointer to the data and
@@ -547,7 +548,9 @@ impl<T: PartialEq + Trace> PartialEq for Cc<T> {
     /// five == Cc::new(5);
     /// ```
     #[inline(always)]
-    fn eq(&self, other: &Cc<T>) -> bool { **self == **other }
+    fn eq(&self, other: &Cc<T>) -> bool {
+        **self == **other
+    }
 
     /// Inequality for two `Cc<T>`s.
     ///
@@ -563,7 +566,9 @@ impl<T: PartialEq + Trace> PartialEq for Cc<T> {
     /// five != Cc::new(5);
     /// ```
     #[inline(always)]
-    fn ne(&self, other: &Cc<T>) -> bool { **self != **other }
+    fn ne(&self, other: &Cc<T>) -> bool {
+        **self != **other
+    }
 }
 
 impl<T: Eq + Trace> Eq for Cc<T> {}
@@ -601,7 +606,9 @@ impl<T: PartialOrd + Trace> PartialOrd for Cc<T> {
     /// five < Cc::new(5);
     /// ```
     #[inline(always)]
-    fn lt(&self, other: &Cc<T>) -> bool { **self < **other }
+    fn lt(&self, other: &Cc<T>) -> bool {
+        **self < **other
+    }
 
     /// 'Less-than or equal to' comparison for two `Cc<T>`s.
     ///
@@ -617,7 +624,9 @@ impl<T: PartialOrd + Trace> PartialOrd for Cc<T> {
     /// five <= Cc::new(5);
     /// ```
     #[inline(always)]
-    fn le(&self, other: &Cc<T>) -> bool { **self <= **other }
+    fn le(&self, other: &Cc<T>) -> bool {
+        **self <= **other
+    }
 
     /// Greater-than comparison for two `Cc<T>`s.
     ///
@@ -633,7 +642,9 @@ impl<T: PartialOrd + Trace> PartialOrd for Cc<T> {
     /// five > Cc::new(5);
     /// ```
     #[inline(always)]
-    fn gt(&self, other: &Cc<T>) -> bool { **self > **other }
+    fn gt(&self, other: &Cc<T>) -> bool {
+        **self > **other
+    }
 
     /// 'Greater-than or equal to' comparison for two `Cc<T>`s.
     ///
@@ -649,7 +660,9 @@ impl<T: PartialOrd + Trace> PartialOrd for Cc<T> {
     /// five >= Cc::new(5);
     /// ```
     #[inline(always)]
-    fn ge(&self, other: &Cc<T>) -> bool { **self >= **other }
+    fn ge(&self, other: &Cc<T>) -> bool {
+        **self >= **other
+    }
 }
 
 impl<T: Ord + Trace> Ord for Cc<T> {
@@ -667,7 +680,9 @@ impl<T: Ord + Trace> Ord for Cc<T> {
     /// five.partial_cmp(&Cc::new(5));
     /// ```
     #[inline]
-    fn cmp(&self, other: &Cc<T>) -> Ordering { (**self).cmp(&**other) }
+    fn cmp(&self, other: &Cc<T>) -> Ordering {
+        (**self).cmp(&**other)
+    }
 }
 
 // FIXME (#18248) Make `T` `Sized?`
@@ -708,7 +723,6 @@ pub struct Weak<T: Trace> {
 }
 
 impl<T: Trace> Weak<T> {
-
     /// Upgrades a weak reference to a strong reference.
     ///
     /// Upgrades the `Weak<T>` reference to an `Cc<T>`, if possible.
@@ -778,7 +792,6 @@ impl<T: Trace> Drop for Weak<T> {
 }
 
 impl<T: Trace> Clone for Weak<T> {
-
     /// Makes a clone of the `Weak<T>`.
     ///
     /// This increases the weak reference count.
@@ -837,7 +850,6 @@ impl<T: Trace> CcBoxPtr for Cc<T> {
             &self._ptr.as_ref().data
         }
     }
-
 }
 
 impl<T: Trace> CcBoxPtr for Weak<T> {
@@ -851,13 +863,13 @@ impl<T: Trace> CcBoxPtr for Weak<T> {
             &self._ptr.as_ref().data
         }
     }
-
 }
 
 impl<T: Trace> CcBoxPtr for CcBox<T> {
     #[inline(always)]
-    fn data(&self) -> &CcBoxData { &self.data }
-
+    fn data(&self) -> &CcBoxData {
+        &self.data
+    }
 }
 
 unsafe fn deallocate(ptr: NonNull<dyn CcBoxPtr>) {
@@ -870,25 +882,25 @@ unsafe fn drop_value(ptr: NonNull<dyn CcBoxPtr>) {
 
 #[cfg(test)]
 mod tests {
-    use super::{Cc, Weak, Trace, Tracer};
+    use super::{Cc, Trace, Tracer, Weak};
+    use collect::collect_cycles;
     use std::boxed::Box;
     use std::cell::RefCell;
-    use std::option::Option;
-    use std::option::Option::{Some, None};
-    use std::result::Result::{Err, Ok};
-    use std::mem::drop;
     use std::clone::Clone;
-    use collect::collect_cycles;
+    use std::mem::drop;
+    use std::option::Option;
+    use std::option::Option::{None, Some};
+    use std::result::Result::{Err, Ok};
 
     // Tests copied from `Rc<T>`.
 
     #[test]
     fn test_clone() {
         {
-        let x = Cc::new(RefCell::new(5));
-        let y = x.clone();
-        *x.borrow_mut() = 20;
-        assert_eq!(*y.borrow(), 20);
+            let x = Cc::new(RefCell::new(5));
+            let y = x.clone();
+            *x.borrow_mut() = 20;
+            assert_eq!(*y.borrow(), 20);
         }
         collect_cycles();
     }
@@ -902,10 +914,10 @@ mod tests {
     #[test]
     fn test_simple_clone() {
         {
-        let x = Cc::new(5);
-        let y = x.clone();
-        assert_eq!(*x, 5);
-        assert_eq!(*y, 5);
+            let x = Cc::new(5);
+            let y = x.clone();
+            assert_eq!(*x, 5);
+            assert_eq!(*y, 5);
         }
         collect_cycles();
     }
@@ -919,9 +931,9 @@ mod tests {
     #[test]
     fn test_live() {
         {
-        let x = Cc::new(5);
-        let y = x.downgrade();
-        assert!(y.upgrade().is_some());
+            let x = Cc::new(5);
+            let y = x.downgrade();
+            assert!(y.upgrade().is_some());
         }
         collect_cycles();
     }
@@ -937,17 +949,19 @@ mod tests {
     #[test]
     fn weak_self_cyclic() {
         {
-        struct Cycle {
-            x: RefCell<Option<Weak<Cycle>>>
-        }
+            struct Cycle {
+                x: RefCell<Option<Weak<Cycle>>>,
+            }
 
-        impl Trace for Cycle {
-            fn trace(&self, _: &mut Tracer) { }
-        }
+            impl Trace for Cycle {
+                fn trace(&self, _: &mut Tracer) {}
+            }
 
-        let a = Cc::new(Cycle { x: RefCell::new(None) });
-        let b = a.clone().downgrade();
-        *a.x.borrow_mut() = Some(b);
+            let a = Cc::new(Cycle {
+                x: RefCell::new(None),
+            });
+            let b = a.clone().downgrade();
+            *a.x.borrow_mut() = Some(b);
         }
         collect_cycles();
         // hopefully we don't double-free (or leak)...
@@ -956,16 +970,16 @@ mod tests {
     #[test]
     fn is_unique() {
         {
-        let x = Cc::new(3);
-        assert!(x.is_unique());
-        let y = x.clone();
-        assert!(!x.is_unique());
-        drop(y);
-        assert!(x.is_unique());
-        let w = x.downgrade();
-        assert!(!x.is_unique());
-        drop(w);
-        assert!(x.is_unique());
+            let x = Cc::new(3);
+            assert!(x.is_unique());
+            let y = x.clone();
+            assert!(!x.is_unique());
+            drop(y);
+            assert!(x.is_unique());
+            let w = x.downgrade();
+            assert!(!x.is_unique());
+            drop(w);
+            assert!(x.is_unique());
         }
         collect_cycles();
     }
@@ -973,19 +987,19 @@ mod tests {
     #[test]
     fn test_strong_count() {
         {
-        let a = Cc::new(0u32);
-        assert!(a.strong_count() == 1);
-        let w = a.downgrade();
-        assert!(a.strong_count() == 1);
-        let b = w.upgrade().expect("upgrade of live rc failed");
-        assert!(b.strong_count() == 2);
-        assert!(b.strong_count() == 2);
-        drop(w);
-        drop(a);
-        assert!(b.strong_count() == 1);
-        let c = b.clone();
-        assert!(b.strong_count() == 2);
-        assert!(c.strong_count() == 2);
+            let a = Cc::new(0u32);
+            assert!(a.strong_count() == 1);
+            let w = a.downgrade();
+            assert!(a.strong_count() == 1);
+            let b = w.upgrade().expect("upgrade of live rc failed");
+            assert!(b.strong_count() == 2);
+            assert!(b.strong_count() == 2);
+            drop(w);
+            drop(a);
+            assert!(b.strong_count() == 1);
+            let c = b.clone();
+            assert!(b.strong_count() == 2);
+            assert!(c.strong_count() == 2);
         }
         collect_cycles();
     }
@@ -993,19 +1007,19 @@ mod tests {
     #[test]
     fn test_weak_count() {
         {
-        let a = Cc::new(0u32);
-        assert!(a.strong_count() == 1);
-        assert!(a.weak_count() == 0);
-        let w = a.downgrade();
-        assert!(a.strong_count() == 1);
-        assert!(a.weak_count() == 1);
-        drop(w);
-        assert!(a.strong_count() == 1);
-        assert!(a.weak_count() == 0);
-        let c = a.clone();
-        assert!(a.strong_count() == 2);
-        assert!(a.weak_count() == 0);
-        drop(c);
+            let a = Cc::new(0u32);
+            assert!(a.strong_count() == 1);
+            assert!(a.weak_count() == 0);
+            let w = a.downgrade();
+            assert!(a.strong_count() == 1);
+            assert!(a.weak_count() == 1);
+            drop(w);
+            assert!(a.strong_count() == 1);
+            assert!(a.weak_count() == 0);
+            let c = a.clone();
+            assert!(a.strong_count() == 2);
+            assert!(a.weak_count() == 0);
+            drop(c);
         }
         collect_cycles();
     }
@@ -1013,14 +1027,14 @@ mod tests {
     #[test]
     fn try_unwrap() {
         {
-        let x = Cc::new(3);
-        assert_eq!(x.try_unwrap(), Ok(3));
-        let x = Cc::new(4);
-        let _y = x.clone();
-        assert_eq!(x.try_unwrap(), Err(Cc::new(4)));
-        let x = Cc::new(5);
-        let _w = x.downgrade();
-        assert_eq!(x.try_unwrap(), Err(Cc::new(5)));
+            let x = Cc::new(3);
+            assert_eq!(x.try_unwrap(), Ok(3));
+            let x = Cc::new(4);
+            let _y = x.clone();
+            assert_eq!(x.try_unwrap(), Err(Cc::new(4)));
+            let x = Cc::new(5);
+            let _w = x.downgrade();
+            assert_eq!(x.try_unwrap(), Err(Cc::new(5)));
         }
         collect_cycles();
     }
@@ -1028,43 +1042,42 @@ mod tests {
     #[test]
     fn get_mut() {
         {
-        let mut x = Cc::new(3);
-        *x.get_mut().unwrap() = 4;
-        assert_eq!(*x, 4);
-        let y = x.clone();
-        assert!(x.get_mut().is_none());
-        drop(y);
-        assert!(x.get_mut().is_some());
-        let _w = x.downgrade();
-        assert!(x.get_mut().is_none());
+            let mut x = Cc::new(3);
+            *x.get_mut().unwrap() = 4;
+            assert_eq!(*x, 4);
+            let y = x.clone();
+            assert!(x.get_mut().is_none());
+            drop(y);
+            assert!(x.get_mut().is_some());
+            let _w = x.downgrade();
+            assert!(x.get_mut().is_none());
         }
         collect_cycles();
     }
 
-
     #[test]
     fn test_cowrc_clone_make_unique() {
         {
-        let mut cow0 = Cc::new(75);
-        let mut cow1 = cow0.clone();
-        let mut cow2 = cow1.clone();
+            let mut cow0 = Cc::new(75);
+            let mut cow1 = cow0.clone();
+            let mut cow2 = cow1.clone();
 
-        assert!(75 == *cow0.make_unique());
-        assert!(75 == *cow1.make_unique());
-        assert!(75 == *cow2.make_unique());
+            assert!(75 == *cow0.make_unique());
+            assert!(75 == *cow1.make_unique());
+            assert!(75 == *cow2.make_unique());
 
-        *cow0.make_unique() += 1;
-        *cow1.make_unique() += 2;
-        *cow2.make_unique() += 3;
+            *cow0.make_unique() += 1;
+            *cow1.make_unique() += 2;
+            *cow2.make_unique() += 3;
 
-        assert!(76 == *cow0);
-        assert!(77 == *cow1);
-        assert!(78 == *cow2);
+            assert!(76 == *cow0);
+            assert!(77 == *cow1);
+            assert!(78 == *cow2);
 
-        // none should point to the same backing memory
-        assert!(*cow0 != *cow1);
-        assert!(*cow0 != *cow2);
-        assert!(*cow1 != *cow2);
+            // none should point to the same backing memory
+            assert!(*cow0 != *cow1);
+            assert!(*cow0 != *cow2);
+            assert!(*cow1 != *cow2);
         }
         collect_cycles();
     }
@@ -1072,25 +1085,25 @@ mod tests {
     #[test]
     fn test_cowrc_clone_unique2() {
         {
-        let mut cow0 = Cc::new(75);
-        let cow1 = cow0.clone();
-        let cow2 = cow1.clone();
+            let mut cow0 = Cc::new(75);
+            let cow1 = cow0.clone();
+            let cow2 = cow1.clone();
 
-        assert!(75 == *cow0);
-        assert!(75 == *cow1);
-        assert!(75 == *cow2);
+            assert!(75 == *cow0);
+            assert!(75 == *cow1);
+            assert!(75 == *cow2);
 
-        *cow0.make_unique() += 1;
+            *cow0.make_unique() += 1;
 
-        assert!(76 == *cow0);
-        assert!(75 == *cow1);
-        assert!(75 == *cow2);
+            assert!(76 == *cow0);
+            assert!(75 == *cow1);
+            assert!(75 == *cow2);
 
-        // cow1 and cow2 should share the same contents
-        // cow0 should have a unique reference
-        assert!(*cow0 != *cow1);
-        assert!(*cow0 != *cow2);
-        assert!(*cow1 == *cow2);
+            // cow1 and cow2 should share the same contents
+            // cow0 should have a unique reference
+            assert!(*cow0 != *cow1);
+            assert!(*cow0 != *cow2);
+            assert!(*cow1 == *cow2);
         }
         collect_cycles();
     }
@@ -1098,16 +1111,16 @@ mod tests {
     #[test]
     fn test_cowrc_clone_weak() {
         {
-        let mut cow0 = Cc::new(75);
-        let cow1_weak = cow0.downgrade();
+            let mut cow0 = Cc::new(75);
+            let cow1_weak = cow0.downgrade();
 
-        assert!(75 == *cow0);
-        assert!(75 == *cow1_weak.upgrade().unwrap());
+            assert!(75 == *cow0);
+            assert!(75 == *cow1_weak.upgrade().unwrap());
 
-        *cow0.make_unique() += 1;
+            *cow0.make_unique() += 1;
 
-        assert!(76 == *cow0);
-        assert!(cow1_weak.upgrade().is_none());
+            assert!(76 == *cow0);
+            assert!(cow1_weak.upgrade().is_none());
         }
         collect_cycles();
     }
@@ -1162,11 +1175,13 @@ mod tests {
                 x: Cc<RefCell<Option<A>>>,
             }
             struct WeakA {
-                _x: Weak<RefCell<Option<A>>>
+                _x: Weak<RefCell<Option<A>>>,
             }
             impl A {
                 fn downgrade(this: &Self) -> WeakA {
-                    WeakA { _x: Cc::downgrade(&this.x) }
+                    WeakA {
+                        _x: Cc::downgrade(&this.x),
+                    }
                 }
             }
             impl Clone for A {
@@ -1179,7 +1194,9 @@ mod tests {
                     self.x.trace(tracer);
                 }
             }
-            let a = A { x: Cc::new(RefCell::new(None)) };
+            let a = A {
+                x: Cc::new(RefCell::new(None)),
+            };
             *a.x.borrow_mut() = Some(a.clone());
             retained_weak_a = A::downgrade(&a);
         }
@@ -1192,14 +1209,14 @@ mod tests {
         let count = std::rc::Rc::new(std::cell::Cell::new(0));
         struct A {
             count: std::rc::Rc<std::cell::Cell<i32>>,
-            next_op: Cc<RefCell<Option<A>>>
+            next_op: Cc<RefCell<Option<A>>>,
         }
         impl Clone for A {
             fn clone(&self) -> Self {
                 self.count.set(self.count.get() + 1);
                 A {
                     count: self.count.clone(),
-                    next_op: self.next_op.clone()
+                    next_op: self.next_op.clone(),
                 }
             }
         }
@@ -1213,7 +1230,7 @@ mod tests {
                 count.set(count.get() + 1);
                 A {
                     count,
-                    next_op: Cc::new(RefCell::new(next_op))
+                    next_op: Cc::new(RefCell::new(next_op)),
                 }
             }
         }

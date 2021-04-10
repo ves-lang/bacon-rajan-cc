@@ -7,11 +7,11 @@
 // or http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use std::ptr::NonNull;
 use std::cell::RefCell;
+use std::ptr::NonNull;
 
-use cc_box_ptr::{CcBoxPtr, free};
 use super::Color;
+use cc_box_ptr::{free, CcBoxPtr};
 
 thread_local!(static ROOTS: RefCell<Vec<NonNull<dyn CcBoxPtr>>> = RefCell::new(vec![]));
 
@@ -210,29 +210,32 @@ fn mark_roots() {
         drained.collect()
     });
 
-    let mut new_roots : Vec<_> = old_roots.into_iter().filter_map(|s| {
-        let keep = unsafe {
-            let box_ptr : &dyn CcBoxPtr = s.as_ref();
-            if box_ptr.color() == Color::Purple {
-                mark_gray(box_ptr);
-                true
-            } else {
-                box_ptr.data().buffered.set(false);
+    let mut new_roots: Vec<_> = old_roots
+        .into_iter()
+        .filter_map(|s| {
+            let keep = unsafe {
+                let box_ptr: &dyn CcBoxPtr = s.as_ref();
+                if box_ptr.color() == Color::Purple {
+                    mark_gray(box_ptr);
+                    true
+                } else {
+                    box_ptr.data().buffered.set(false);
 
-                if box_ptr.color() == Color::Black && box_ptr.strong() == 0 {
-                    free(s);
+                    if box_ptr.color() == Color::Black && box_ptr.strong() == 0 {
+                        free(s);
+                    }
+
+                    false
                 }
+            };
 
-                false
+            if keep {
+                Some(s)
+            } else {
+                None
             }
-        };
-
-        if keep {
-            Some(s)
-        } else {
-            None
-        }
-    }).collect();
+        })
+        .collect();
 
     ROOTS.with(|r| {
         let mut v = r.borrow_mut();
@@ -272,7 +275,7 @@ fn scan_roots() {
     ROOTS.with(|r| {
         let mut v = r.borrow_mut();
         for s in &mut *v {
-            let p : &mut dyn CcBoxPtr = unsafe { s.as_mut() };
+            let p: &mut dyn CcBoxPtr = unsafe { s.as_mut() };
             scan(p);
         }
     });
@@ -283,7 +286,6 @@ fn scan_roots() {
 /// there. It will be freed in the next collection when we iterate over the
 /// buffer in `mark_roots`.
 fn collect_roots() {
-
     // Collecting the nodes into this Vec is a difference from the original
     // Bacon-Rajan paper. We need this because we have destructors and
     // running them during traversal will cause cycles to be broken which
@@ -304,7 +306,7 @@ fn collect_roots() {
     ROOTS.with(|r| {
         let mut v = r.borrow_mut();
         for s in v.drain(..) {
-            let ptr : &dyn CcBoxPtr = unsafe { s.as_ref() };
+            let ptr: &dyn CcBoxPtr = unsafe { s.as_ref() };
             ptr.data().buffered.set(false);
             collect_white(ptr, &mut white);
         }
@@ -313,7 +315,9 @@ fn collect_roots() {
     // Run drop on each of nodes. The previous increment of the weak count during traversal will
     // ensure that all of the memory stays alive during this loop.
     for i in &white {
-        unsafe { free(*i); }
+        unsafe {
+            free(*i);
+        }
     }
 
     // It's now safe to deallocate the memory as long as we are the last weak reference.
