@@ -45,7 +45,8 @@ jobs:
       - name: Run cargo miri setup
         uses: actions-rs/cargo@v1
         with:
-          command: miri setup
+          command: miri
+          args: test
 
       - name: Run cargo fmt
         uses: actions-rs/cargo@v1
@@ -63,4 +64,5 @@ jobs:
       - name: Run cargo miri test
         uses: actions-rs/cargo@v1
         with:
-          command: miri test
+          command: miri
+          args: test
