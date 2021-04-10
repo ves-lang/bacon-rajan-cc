@@ -1,5 +1,8 @@
 # bacon_rajan_cc (fork)
-This is a fork of bacon_rajan_cc by https://github.com/fitzgen.
+This is a fork of bacon_rajan_cc by https://github.com/fitzgen aiming to introduce the modifications
+useful for the purposes of Ves.
+
+## Original Readme
 
 `Cc<T>`: A reference counted type with cycle collection for Rust. Concurrent or
 stop-the-world. Based on the paper
