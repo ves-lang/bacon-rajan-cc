@@ -224,7 +224,8 @@ pub struct CcBoxData {
 }
 
 #[derive(Debug)]
-struct CcBox<T: Trace> {
+#[doc(hidden)]
+pub struct CcBox<T: Trace> {
     value: T,
     data: CcBoxData,
 }
@@ -256,7 +257,7 @@ impl<T: Trace> Cc<T> {
                 // the allocation while the strong destructor is running, even
                 // if the weak pointer is stored inside the strong one.
                 _ptr: NonNull::new_unchecked(Box::into_raw(Box::new(CcBox {
-                    value: value,
+                    value,
                     data: CcBoxData {
                         strong: Cell::new(1),
                         weak: Cell::new(1),
@@ -282,6 +283,58 @@ impl<T: Trace> Cc<T> {
     pub fn downgrade(&self) -> Weak<T> {
         self.inc_weak();
         Weak { _ptr: self._ptr }
+    }
+
+    /// Constructs a new Cc from the given raw `CcBox` pointer. This function must be called once and only once per every leaked `CcBox`.
+    ///
+    /// # Safety
+    /// The caller must guarantee that this pointer hasn't been returned to `from_raw` before.
+    /// Failing to uphold this condition will lead to a use after free.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use bacon_rajan_cc::Cc;
+    ///
+    /// let five = Cc::new(5);
+    /// let cloned = five.clone();
+    /// let raw = unsafe { five.leak() };
+    /// assert_eq!(cloned.strong_count(), 2);
+    ///
+    /// std::mem::drop(cloned);
+    ///
+    /// let reconstructed = unsafe { Cc::from_raw(raw) };
+    /// assert_eq!(reconstructed.strong_count(), 1);
+    /// ```
+    pub unsafe fn from_raw(ptr: NonNull<CcBox<T>>) -> Self {
+        Self { _ptr: ptr }
+    }
+
+    /// Leaks the inner pointer to the baking CcBox<T>. This operation is unsafe for the following reasons:
+    ///
+    /// # Safety
+    /// 1) The caller must returned the leaked pointer to [`Cc`] or the memory will be leaked as the ref count will never go to 0;
+    /// 2) The caller must ensure that the pointer is returned to [`Cc`] once and only once, since the Cc will be deallocated as soon as the count reaches 0.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use bacon_rajan_cc::Cc;
+    ///
+    /// let five = Cc::new(5);
+    /// let cloned = five.clone();
+    /// let raw = unsafe { five.leak() };
+    /// assert_eq!(cloned.strong_count(), 2);
+    ///
+    /// std::mem::drop(cloned);
+    ///
+    /// let reconstructed = unsafe { Cc::from_raw(raw) };
+    /// assert_eq!(reconstructed.strong_count(), 1);
+    /// ```
+    #[inline]
+    pub unsafe fn leak(self) -> NonNull<CcBox<T>> {
+        let this = std::mem::ManuallyDrop::new(self);
+        this._ptr
     }
 }
 
@@ -891,6 +944,118 @@ mod tests {
     use std::option::Option;
     use std::option::Option::{None, Some};
     use std::result::Result::{Err, Ok};
+
+    #[test]
+    fn test_leak_and_from_raw() {
+        let x = Cc::new(RefCell::new(5));
+        let y = x.clone();
+        assert_eq!(x.strong_count(), 2);
+        assert_eq!(x.weak_count(), 0);
+
+        let y = unsafe { y.leak() };
+        assert_eq!(x.strong_count(), 2);
+        assert_eq!(x.weak_count(), 0);
+
+        std::mem::drop(x);
+
+        let y = unsafe { Cc::from_raw(y) };
+        assert_eq!(y.strong_count(), 1);
+        assert_eq!(y.weak_count(), 0);
+        assert_eq!(y.is_unique(), true);
+
+        let weak = Cc::downgrade(&y);
+        assert_eq!(y.strong_count(), 1);
+        assert_eq!(y.weak_count(), 1);
+        assert_eq!(y.is_unique(), false);
+
+        let y = unsafe { y.leak() };
+        assert_eq!(
+            weak.upgrade().map(|cc| (
+                cc.weak_count(),
+                cc.strong_count() - 1 /* compensate for the Cc we're calling strong_count() on */
+            )),
+            Some((1, 1))
+        );
+
+        let y = unsafe { Cc::from_raw(y) };
+        assert_eq!(
+            weak.upgrade()
+                .map(|cc| (cc.weak_count(), cc.strong_count() - 1 /* See above */)),
+            Some((1, 1))
+        );
+        std::mem::drop(y);
+
+        assert_eq!(weak.upgrade(), None);
+    }
+
+    #[test]
+    fn test_leak_with_collector() {
+        use std::cell::Cell;
+        use std::rc::Rc;
+
+        let count = Rc::new(Cell::new(0));
+
+        struct Obj {
+            count: Rc<Cell<i32>>,
+            next_op: Cc<RefCell<Option<Obj>>>,
+        }
+
+        impl Clone for Obj {
+            fn clone(&self) -> Self {
+                self.count.set(self.count.get() + 1);
+                Obj {
+                    count: self.count.clone(),
+                    next_op: self.next_op.clone(),
+                }
+            }
+        }
+
+        impl Trace for Obj {
+            fn trace(&self, tracer: &mut Tracer) {
+                self.next_op.trace(tracer);
+            }
+        }
+
+        impl Obj {
+            fn new(count: Rc<Cell<i32>>, next_op: Option<Obj>) -> Obj {
+                count.set(count.get() + 1);
+                Obj {
+                    count,
+                    next_op: Cc::new(RefCell::new(next_op)),
+                }
+            }
+        }
+
+        impl Drop for Obj {
+            fn drop(&mut self) {
+                self.count.set(self.count.get() - 1);
+            }
+        }
+
+        let leaked;
+        {
+            let q;
+            {
+                let z = Obj::new(count.clone(), None);
+                let y = Obj::new(count.clone(), Some(z.clone()));
+                let x = Obj::new(count.clone(), Some(y));
+                *z.next_op.borrow_mut() = Some(x.clone());
+                q = x;
+                leaked = unsafe { z.next_op.clone().leak() };
+            }
+
+            collect_cycles();
+            assert_eq!(count.get(), 4);
+
+            *q.next_op.borrow_mut() = None;
+        }
+
+        collect_cycles();
+        assert_eq!(count.get(), 1);
+
+        std::mem::drop(unsafe { Cc::from_raw(leaked) });
+        assert_eq!(count.get(), 0);
+    }
 
     // Tests copied from `Rc<T>`.
 
