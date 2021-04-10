@@ -1,8 +1,5 @@
-# bacon_rajan_cc
-
-[![Build Status](https://travis-ci.org/fitzgen/bacon-rajan-cc.png?branch=master)](https://travis-ci.org/fitzgen/bacon-rajan-cc)
-
-[![crates.io](http://meritbadge.herokuapp.com/bacon_rajan_cc)](https://crates.io/crates/bacon_rajan_cc)
+# bacon_rajan_cc (fork)
+This is a fork of bacon_rajan_cc by https://github.com/fitzgen.
 
 `Cc<T>`: A reference counted type with cycle collection for Rust. Concurrent or
 stop-the-world. Based on the paper
