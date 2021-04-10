@@ -1,6 +1,12 @@
 # bacon_rajan_cc (fork)
 This is a fork of bacon_rajan_cc by https://github.com/fitzgen aiming to introduce the modifications
-useful for the purposes of Ves.
+useful for the purposes of Ves:
+
+1. [x] Use allocation contexts instead of a thread local to allow multiple independent object graphs within the same runtime.
+2. [x] Provide an API for accessing raw internal Rc pointers.
+3. [ ] Make CcContext and Cc thread-safe (possibly gated behind a feature)
+4. [ ] Provide a way to automatically trigger cycle collection after a number of potential cycle roots exceeds a threshold.
+5. [ ] Implement concurrent collection.
 
 ## Original Readme
 
@@ -26,15 +32,8 @@ Then, in your crate:
 
 ```rust
 extern crate bacon_rajan_cc;
-use bacon_rajan_cc::{Cc, Trace, Tracer};
+use bacon_rajan_cc::{CcContext, Cc, Trace, Tracer};
 ```
-
-## Documentation
-
-[Read the docs!][docs]
-
-[paper]: http://researcher.watson.ibm.com/researcher/files/us-bacon/Bacon01Concurrent.pdf
-[docs]: https://docs.rs/bacon_rajan_cc/
 
 ## Alternatives
 - https://github.com/withoutboats/shifgrethor

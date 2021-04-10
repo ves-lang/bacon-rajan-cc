@@ -258,6 +258,9 @@ mod impls {
         impl Trace for String {
             fn trace(&self, _tracer: &mut Tracer) {}
         }
+        impl<'a> Trace for &'a str {
+            fn trace(&self, _tracer: &mut Tracer) {}
+        }
     }
 
     mod ffi {
