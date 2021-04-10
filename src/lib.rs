@@ -485,25 +485,6 @@ impl<T: PartialEq + Trace> PartialEq for Cc<T> {
     fn eq(&self, other: &Cc<T>) -> bool {
         **self == **other
     }
-
-    /// Inequality for two `Cc<T>`s.
-    ///
-    /// Two `Cc<T>`s are unequal if their inner value are unequal.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use bacon_rajan_cc::CcContext;
-    ///
-    /// let ctx = CcContext::new();
-    /// let five = ctx.cc(5);
-    ///
-    /// assert!(five != ctx.cc(6));
-    /// ```
-    #[inline(always)]
-    fn ne(&self, other: &Cc<T>) -> bool {
-        **self != **other
-    }
 }
 
 impl<T: Eq + Trace> Eq for Cc<T> {}

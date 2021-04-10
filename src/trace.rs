@@ -212,7 +212,7 @@ mod impls {
 
         impl<K, V: Trace> Trace for collections::BTreeMap<K, V> {
             fn trace(&self, tracer: &mut Tracer) {
-                for (_, v) in self {
+                for v in self.values() {
                     v.trace(tracer);
                 }
             }
@@ -220,7 +220,7 @@ mod impls {
 
         impl<K: Eq + hash::Hash + Trace, V: Trace> Trace for collections::HashMap<K, V> {
             fn trace(&self, tracer: &mut Tracer) {
-                for (_, v) in self {
+                for v in self.values() {
                     v.trace(tracer);
                 }
             }

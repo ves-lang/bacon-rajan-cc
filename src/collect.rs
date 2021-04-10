@@ -24,7 +24,7 @@ pub(crate) type ContextPtr = Ptr<InnerCcContext>;
 /// The context calls collect_cycles() in its [`Drop`] impl to ensure that no memory is leaked.
 /// Note: The user must be careful not to create cycles between [`Cc`]s from different contexts. The implementation will panic
 /// in debug builds should a cycle like this be found during collection.
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone)]
 pub struct CcContext {
     pub(crate) inner: ContextPtr,
 }
@@ -227,7 +227,7 @@ impl CcContext {
     }
 }
 
-#[derive(Debug)]
+#[derive(Default, Debug)]
 pub(crate) struct InnerCcContext {
     roots: RefCell<Vec<NonNull<dyn CcBoxPtr>>>,
 }
@@ -300,6 +300,7 @@ impl InnerCcContext {
             drained.collect()
         };
 
+        #[allow(clippy::unnecessary_filter_map)]
         let mut new_roots: Vec<_> = old_roots
             .into_iter()
             .filter_map(|s| {
