@@ -45,8 +45,8 @@ jobs:
       - name: Run cargo miri test
         uses: actions-rs/cargo@v1
         with:
-          command: miri test
-          args: -- -Zunstable-options --exclude-should-panic
+          command: miri
+          args: test -- -Zunstable-options --exclude-should-panic
 
       - name: Run cargo fmt
         uses: actions-rs/cargo@v1
