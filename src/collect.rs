@@ -241,13 +241,21 @@ pub(crate) struct InnerCcContext {
 }
 
 impl InnerCcContext {
+    #[cfg(not(debug_assertions))]
+    fn check_ptr_ref_is_from_the_same_context(&self, _box_ptr: &dyn CcBoxPtr) {}
+
+    #[cfg(debug_assertions)]
     fn check_ptr_ref_is_from_the_same_context(&self, box_ptr: &dyn CcBoxPtr) {
+        let ctx = Ptr::into_raw(box_ptr.data().ctx.clone());
+
         // Check that the given Cc belongs to the same context
         debug_assert_eq!(
             Ptr::as_ptr(&box_ptr.data().ctx),
             self as *const _,
             "Attempted to mix Ccs from different contexts"
         );
+
+        unsafe { Ptr::from_raw(ctx) };
     }
 
     fn check_ptr_is_from_the_same_context(&self, box_ptr: NonNull<dyn CcBoxPtr>) {
