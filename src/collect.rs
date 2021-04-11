@@ -29,6 +29,14 @@ pub struct CcContext {
     pub(crate) inner: ContextPtr,
 }
 
+impl std::ops::Drop for CcContext {
+    fn drop(&mut self) {
+        if Ptr::strong_count(&self.inner) == self.inner.number_of_roots_buffered() + 1 {
+            self.collect_cycles();
+        }
+    }
+}
+
 impl CcContext {
     /// Creates a new [`CcContext`].
     pub fn new() -> Self {
@@ -230,12 +238,6 @@ impl CcContext {
 #[derive(Default, Debug)]
 pub(crate) struct InnerCcContext {
     roots: RefCell<Vec<NonNull<dyn CcBoxPtr>>>,
-}
-
-impl std::ops::Drop for InnerCcContext {
-    fn drop(&mut self) {
-        self.collect_cycles();
-    }
 }
 
 impl InnerCcContext {

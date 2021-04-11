@@ -306,9 +306,18 @@ impl<T: 'static + Trace> Cc<T> {
             unsafe {
                 // Copy the contained object.
                 let val = ptr::read(&*self);
+
+                // Copy the contained context reference
+                let ctx = collect::Ptr::into_raw(self.data().ctx.clone());
+
                 // Destruct the box and skip our Drop. We can ignore the
                 // refcounts because we know we're unique.
                 dealloc(self._ptr.cast().as_ptr(), Layout::new::<CcBox<T>>());
+
+                // Call from_raw() twice to compensate for the skipped drop
+                std::mem::drop(collect::Ptr::from_raw(ctx));
+                std::mem::drop(collect::Ptr::from_raw(ctx));
+
                 forget(self);
                 Ok(val)
             }
@@ -814,9 +823,6 @@ mod tests {
     use std::cell::RefCell;
     use std::clone::Clone;
     use std::mem::drop;
-    use std::option::Option;
-    use std::option::Option::{None, Some};
-    use std::result::Result::{Err, Ok};
 
     #[test]
     #[should_panic]
