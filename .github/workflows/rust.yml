@@ -42,10 +42,10 @@ jobs:
           override: true
           components: rustfmt, clippy, miri
 
-      - name: Run cargo miri setup and test
+      - name: Run cargo miri test
         uses: actions-rs/cargo@v1
         with:
-          command: miri setup
+          command: miri test
           args: -- -Zunstable-options --exclude-should-panic
 
       - name: Run cargo fmt
