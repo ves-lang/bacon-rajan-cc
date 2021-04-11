@@ -202,7 +202,7 @@ impl<T: Trace> Cc<T> {
     /// Leaks the inner pointer to the baking CcBox<T>. This operation is unsafe for the following reasons:
     ///
     /// # Safety
-    /// 1) The caller must returned the leaked pointer to [`Cc`] or the memory will be leaked as the ref count will never go to 0;
+    /// 1) The caller must return the leaked pointer to [`Cc`] or the memory will be leaked as the ref count will never go to 0;
     /// 2) The caller must ensure that the pointer is returned to [`Cc`] once and only once, since the Cc will be deallocated as soon as the count reaches 0.
     ///
     /// # Examples
