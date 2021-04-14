@@ -273,7 +273,6 @@ impl<T: Trace> Cc<T> {
     }
 
     fn possible_root(&mut self) {
-        println!("???????????? {:?}", self.strong());
         debug_assert!(self.strong() > 0);
 
         // Check if the gc should run on every CC drop.
