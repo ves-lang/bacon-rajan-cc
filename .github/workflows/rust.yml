@@ -54,7 +54,13 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: miri
-          args: test -- -Zunstable-options --exclude-should-panic
+          args: test --lib -- -Zunstable-options --exclude-should-panic
+
+      - name: Run cargo miri test with auot_gc on
+        uses: actions-rs/cargo@v1
+        with:
+          command: miri
+          args: test --lib --features=auto_gc,gc_placement_cc_alloc -- -Zunstable-options --exclude-should-panic
 
       - name: Run cargo fmt
         uses: actions-rs/cargo@v1

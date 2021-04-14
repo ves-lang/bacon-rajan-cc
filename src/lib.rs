@@ -67,6 +67,19 @@ mod cc_box_ptr;
 use cc_box_ptr::CcBoxPtr;
 use collect::ContextPtr;
 
+#[cfg(all(
+    feature = "auto_gc",
+    not(any(
+        feature = "gc_placement_cc_alloc",
+        feature = "gc_placement_cc_cycle_marked",
+        feature = "gc_placement_cc_every_drop"
+    ))
+))]
+compile_error!(
+    "auto_gc is useless without the gc_placement_* features: please include at least one of \
+    gc_placement_cc_alloc, gc_placement_cc_cycle_marked or gc_placement_cc_every_drop"
+);
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[doc(hidden)]
 pub enum Color {
