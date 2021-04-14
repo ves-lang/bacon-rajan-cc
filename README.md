@@ -5,8 +5,9 @@ useful for the purposes of Ves:
 1. [x] Use allocation contexts instead of a thread local to allow multiple independent object graphs within the same runtime.
 2. [x] Provide an API for accessing raw internal Rc pointers.
 3. [ ] Make CcContext and Cc thread-safe (possibly gated behind a feature)
-4. [ ] Provide a way to automatically trigger cycle collection after a number of potential cycle roots exceeds a threshold.
-5. [ ] Implement concurrent collection.
+4. [x] Provide a way to automatically trigger cycle collection after a number of potential cycle roots exceeds a threshold.
+5. [x] Provide a way to automatically trigger cycle collection after a number of bytes has been allocated using the proxy allocator.
+6. [ ] Implement concurrent collection.
 
 ## Original Readme
 

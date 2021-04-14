@@ -18,3 +18,12 @@ keywords=["cc", "gc", "mark", "sweep", "garbage"]
 name = "bacon_rajan_cc"
 
 [dependencies]
+log = { version = "0.4.14", optional = true }
+
+[features]
+default = []
+auto_gc = []
+gc_placement_cc_alloc = []
+gc_placement_cc_cycle_marked = []
+gc_placement_cc_every_drop = []
+gc_debug = ["log"]

@@ -12,13 +12,22 @@
 use std::ptr::NonNull;
 use std::{cell::RefCell, rc::Rc};
 
-use crate::{Cc, Trace};
+use crate::{proxy_allocator::ProxyAllocator, Cc, Trace};
 
 use super::Color;
 use cc_box_ptr::{free, CcBoxPtr};
 
 pub(crate) type Ptr<T> = Rc<T>;
 pub(crate) type ContextPtr = Ptr<InnerCcContext>;
+
+/// The default minimum number of roots required to trigger the GC.
+pub const GC_DEFAULT_MIN_ROOTS_TO_TRIGGER: usize = 1000;
+
+/// The default minimum number of bytes required to trigger the GC.
+pub const GC_DEFAULT_MIN_BYTES_TO_TRIGGER: usize = 1024 * 1024; // 1MB
+
+/// The multiplier that will be used to adjust the GC threshold after every automatic collection cycle.
+pub const GC_DEFAULT_HEAP_GROWTH_FACTOR: f64 = 2.0;
 
 /// A Cc context that wraps the roots used by the GC to collect reference cycles in the object graph.
 /// The context calls collect_cycles() in its [`Drop`] impl to ensure that no memory is leaked.
@@ -43,6 +52,8 @@ impl CcContext {
         Self {
             inner: Ptr::new(InnerCcContext {
                 roots: RefCell::new(Vec::new()),
+                #[cfg(feature = "auto_gc")]
+                gc: RefCell::new(GcData::default()),
             }),
         }
     }
@@ -233,14 +244,160 @@ impl CcContext {
     pub fn collect_cycles(&self) {
         self.inner.collect_cycles()
     }
+
+    /// Returns the proxy allocator used by this context. You should only use this allocator
+    /// inside the objects held by [`Cc`]s. Using it elsewhere will result in nonsensical GC triggers
+    /// unrelated to the actual memory used by the object graph.
+    #[cfg(feature = "auto_gc")]
+    #[inline(always)]
+    pub fn proxy_allocator(&self) -> ProxyAllocator {
+        self.inner.proxy_allocator()
+    }
+
+    /// Returns the number of bytes allocated with the proxy allocator.
+    /// This number includes the bookkeeping memory of each [`Cc`] pointer.
+    #[cfg(feature = "auto_gc")]
+    #[inline]
+    pub fn bytes_allocated(&self) -> usize {
+        self.inner.gc.borrow().alloc.bytes_allocated()
+    }
+
+    /// Returns the number of bytes required to kick off the next garbage collection cycle.
+    #[cfg(feature = "auto_gc")]
+    #[inline]
+    pub fn gc_threshold(&self) -> usize {
+        self.inner.gc.borrow().gc_threshold
+    }
+
+    /// Returns the minimum number of bytes required to kick off a garbage collection cycle.
+    /// The adaptive threshold never goes below this value.
+    #[cfg(feature = "auto_gc")]
+    #[inline]
+    pub fn min_gc_threshold(&self) -> usize {
+        self.inner.gc.borrow().min_gc_threshold
+    }
+
+    /// Returns minimum number of cycle roots required to kick off the next garbage collection cycle.
+    /// This strategy works independently from [`gc_threshold`].
+    #[cfg(feature = "auto_gc")]
+    #[inline]
+    pub fn root_threshold(&self) -> usize {
+        self.inner.gc.borrow().root_threshold
+    }
+
+    /// Returns the factor that will be used to grow or shrink the GC threshold every time an automatic GC pass runs.
+    #[cfg(feature = "auto_gc")]
+    #[inline]
+    pub fn heap_growth_factor(&self) -> f64 {
+        self.inner.gc.borrow().heap_growth_factor
+    }
+
+    /// Sets the minimum number of bytes required to kick off the next garbage collection cycle.
+    /// Settings this to 0 is equivalent to disabling the memory-based GC trigger.
+    #[cfg(feature = "auto_gc")]
+    #[inline]
+    pub fn set_gc_threshold(&self, n: usize) {
+        let mut gc = self.inner.gc.borrow_mut();
+        gc.min_gc_threshold = n;
+        gc.gc_threshold = n;
+    }
+
+    /// Sets the minimum number of roots required to kick off the next garbage collection cycle.
+    /// Settings this to 0 is equivalent to disabling the root-based GC trigger.
+    #[cfg(feature = "auto_gc")]
+    #[inline]
+    pub fn set_root_threshold(&self, n: usize) {
+        self.inner.gc.borrow_mut().root_threshold = n;
+    }
+
+    /// Sets the factor that will be used to grow or shrink the GC threshold every time an automatic GC pass runs.
+    #[cfg(feature = "auto_gc")]
+    #[inline]
+    pub fn set_heap_growth_factor(&self, factor: f64) {
+        self.inner.gc.borrow_mut().heap_growth_factor = factor;
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct GcData {
+    heap_growth_factor: f64,
+    min_gc_threshold: usize,
+    gc_threshold: usize,
+    root_threshold: usize,
+    alloc: ProxyAllocator,
+}
+
+impl Default for GcData {
+    fn default() -> Self {
+        Self {
+            heap_growth_factor: GC_DEFAULT_HEAP_GROWTH_FACTOR,
+            min_gc_threshold: GC_DEFAULT_MIN_BYTES_TO_TRIGGER,
+            gc_threshold: GC_DEFAULT_MIN_BYTES_TO_TRIGGER,
+            root_threshold: GC_DEFAULT_MIN_ROOTS_TO_TRIGGER,
+            alloc: ProxyAllocator::new(),
+        }
+    }
 }
 
 #[derive(Default, Debug)]
 pub(crate) struct InnerCcContext {
     roots: RefCell<Vec<NonNull<dyn CcBoxPtr>>>,
+    #[cfg(feature = "auto_gc")]
+    gc: RefCell<GcData>,
 }
 
 impl InnerCcContext {
+    #[cfg(feature = "auto_gc")]
+    #[inline]
+    pub fn proxy_allocator(&self) -> ProxyAllocator {
+        self.gc.borrow().alloc.clone()
+    }
+
+    /// May trigger the GC if either the root threshold or memory usage threshold has been reached.
+    #[cfg(feature = "auto_gc")]
+    pub fn maybe_run_gc(&self) {
+        let gc = self.gc.borrow();
+
+        if (self.roots.borrow().len() < gc.root_threshold || gc.root_threshold == 0)
+            && (gc.alloc.bytes_allocated() < gc.gc_threshold || gc.gc_threshold == 0)
+        {
+            return;
+        }
+
+        #[cfg(feature = "gc_debug")]
+        log::info!(
+            "[GC] Triggered garbage collection with (roots: {} >= {}) or (bytes: {}b > {}b)",
+            self.roots.borrow().len(),
+            gc.root_threshold,
+            gc.alloc.bytes_allocated(),
+            gc.gc_threshold
+        );
+
+        #[cfg(feature = "gc_debug")]
+        log::info!(
+            "[GC] Starting the garbage collector with HEAP = {}b",
+            gc.alloc.bytes_allocated(),
+        );
+
+        #[cfg(feature = "gc_debug")]
+        let before = gc.alloc.bytes_allocated();
+        self.collect_cycles();
+        let after = gc.alloc.bytes_allocated();
+        let factor = gc.heap_growth_factor;
+        let min = gc.min_gc_threshold;
+
+        std::mem::drop(gc);
+
+        let new_threshold = ((factor * after as f64) as usize).max(min);
+        self.gc.borrow_mut().gc_threshold = new_threshold;
+
+        #[cfg(feature = "gc_debug")]
+        log::info!(
+            "[GC] GC has finished, changing the heap size ({}b -> {}b). Next collection will performed at HEAP = {}b",
+            before, after, new_threshold
+        );
+    }
+
     #[cfg(not(debug_assertions))]
     fn check_ptr_ref_is_from_the_same_context(&self, _box_ptr: &dyn CcBoxPtr) {}
 

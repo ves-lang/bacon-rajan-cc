@@ -33,7 +33,7 @@
 //! let cc = ctx.cc(5);
 //! assert_eq!(*cc, 5);
 //! ```
-
+#![cfg_attr(feature = "auto_gc", feature(allocator_api))]
 #![deny(missing_docs)]
 
 extern crate core;
@@ -47,12 +47,18 @@ use core::ops::{Deref, Drop};
 use core::ptr;
 use std::ptr::NonNull;
 
+#[cfg(feature = "auto_gc")]
+use std::alloc::Allocator;
 use std::alloc::{dealloc, Layout};
 
 /// Implementation of cycle detection and collection.
 pub mod collect;
 /// Tracing traits, types, and implementation.
 pub mod trace;
+
+/// A proxy allocator that could be used to tell a [`CcContext`] how much memory is currently used.
+/// Requires the [`allocator_api`] feature.
+pub mod proxy_allocator;
 
 pub use collect::CcContext;
 pub use trace::{Trace, Tracer};
@@ -112,7 +118,7 @@ pub struct Cc<T: 'static + Trace> {
 }
 
 impl<T: Trace> Cc<T> {
-    fn new(ctx: ContextPtr, value: T) -> Cc<T> {
+    fn new_cc(ctx: ContextPtr, value: T) -> Cc<T> {
         unsafe {
             Cc {
                 // There is an implicit weak pointer owned by all the strong
@@ -131,6 +137,21 @@ impl<T: Trace> Cc<T> {
                 }))),
             }
         }
+    }
+
+    #[cfg(not(feature = "auto_gc"))]
+    #[inline(always)]
+    fn new(ctx: ContextPtr, value: T) -> Cc<T> {
+        Self::new_cc(ctx, value)
+    }
+
+    #[cfg(feature = "auto_gc")]
+    fn new(ctx: ContextPtr, value: T) -> Cc<T> {
+        #[cfg(feature = "gc_placement_cc_alloc")]
+        ctx.maybe_run_gc();
+
+        ctx.proxy_allocator().bump(Layout::new::<CcBox<T>>().size());
+        Self::new_cc(ctx, value)
     }
 
     /// Returns the context that this [`Cc`] was allocated in.
@@ -226,6 +247,15 @@ impl<T: Trace> Cc<T> {
         let this = std::mem::ManuallyDrop::new(self);
         this._ptr
     }
+
+    /// Returns a mutable reference to the managed value. The caller must ensure
+    /// that there are no other mutable references to the same value.
+    /// Reminder: aliasing a mutable reference is Undefined Behavior since the language semantics
+    /// and the optimizer heavily rely on the fact that mutable references are never aliased.
+    #[inline]
+    pub unsafe fn deref_mut(&mut self) -> &mut T {
+        &mut self._ptr.as_mut().value
+    }
 }
 
 impl<T: Trace> Cc<T> {
@@ -243,7 +273,16 @@ impl<T: Trace> Cc<T> {
     }
 
     fn possible_root(&mut self) {
+        println!("???????????? {:?}", self.strong());
         debug_assert!(self.strong() > 0);
+
+        // Check if the gc should run on every CC drop.
+        #[cfg(all(
+            feature = "auto_gc",
+            feature = "gc_placement_every_drop",
+            not(feature = "gc_placement_cc_marked")
+        ))]
+        self.data().ctx.maybe_run_gc();
 
         if self.color() == Color::Purple {
             return;
@@ -257,7 +296,15 @@ impl<T: Trace> Cc<T> {
         self.data().buffered.set(true);
         let ptr: NonNull<dyn CcBoxPtr> = self._ptr;
 
-        self.data().ctx.add_root(ptr)
+        self.data().ctx.add_root(ptr);
+
+        // Check if the gc should run on only when the ref count has been decremented for the first time.
+        #[cfg(all(
+            feature = "auto_gc",
+            feature = "gc_placement_cc_marked",
+            not(feature = "gc_placement_every_drop")
+        ))]
+        self.data().ctx.maybe_run_gc();
     }
 }
 
@@ -304,6 +351,9 @@ impl<T: 'static + Trace> Cc<T> {
     pub fn try_unwrap(self) -> Result<T, Cc<T>> {
         if self.is_unique() {
             unsafe {
+                #[cfg(feature = "auto_gc")]
+                let alloc = self.data().ctx.proxy_allocator();
+
                 // Copy the contained object.
                 let val = ptr::read(&*self);
 
@@ -312,7 +362,14 @@ impl<T: 'static + Trace> Cc<T> {
 
                 // Destruct the box and skip our Drop. We can ignore the
                 // refcounts because we know we're unique.
+                #[cfg(not(feature = "auto_gc"))]
                 dealloc(self._ptr.cast().as_ptr(), Layout::new::<CcBox<T>>());
+
+                #[cfg(feature = "auto_gc")]
+                alloc.deallocate(
+                    NonNull::new_unchecked(self._ptr.cast().as_ptr()),
+                    Layout::new::<CcBox<T>>(),
+                );
 
                 // Call from_raw() twice to compensate for the skipped drop
                 std::mem::drop(collect::Ptr::from_raw(ctx));
@@ -806,8 +863,18 @@ impl<T: Trace> CcBoxPtr for CcBox<T> {
     }
 }
 
+#[cfg(not(feature = "auto_gc"))]
 unsafe fn deallocate(ptr: NonNull<dyn CcBoxPtr>) {
     dealloc(ptr.cast().as_ptr(), Layout::for_value(ptr.as_ref()));
+}
+
+#[cfg(feature = "auto_gc")]
+unsafe fn deallocate(ptr: NonNull<dyn CcBoxPtr>) {
+    let proxy = ptr.as_ref().data().ctx.proxy_allocator();
+    proxy.deallocate(
+        NonNull::new_unchecked(ptr.cast().as_ptr()),
+        Layout::for_value(ptr.as_ref()),
+    );
 }
 
 unsafe fn drop_value(ptr: NonNull<dyn CcBoxPtr>) {
@@ -823,6 +890,61 @@ mod tests {
     use std::cell::RefCell;
     use std::clone::Clone;
     use std::mem::drop;
+
+    #[cfg(all(feature = "auto_gc", feature = "gc_placement_cc_alloc"))]
+    #[test]
+    fn test_auto_gc() {
+        use super::proxy_allocator::ProxyAllocator;
+
+        let ctx = CcContext::new();
+        ctx.set_gc_threshold(100); // kick off the GC after 100 bytes
+
+        struct Cycle {
+            v: RefCell<Vec<Cc<i32>, ProxyAllocator>>,
+            next: RefCell<Option<Cc<Cycle>>>,
+        }
+        impl Trace for Cycle {
+            fn trace(&self, tracer: &mut Tracer) {
+                self.next.trace(tracer)
+            }
+        }
+        let cc1 = ctx.cc(Cycle {
+            v: RefCell::new(Vec::new_in(ctx.proxy_allocator())),
+            next: RefCell::new(None),
+        });
+        let cc2 = ctx.cc(Cycle {
+            v: RefCell::new(Vec::new_in(ctx.proxy_allocator())),
+            next: RefCell::new(None),
+        });
+
+        assert_eq!(ctx.bytes_allocated(), 176);
+
+        *cc1.next.borrow_mut() = Some(cc2.clone());
+        *cc2.next.borrow_mut() = Some(cc1.clone());
+
+        for i in 0..20 {
+            cc1.v.borrow_mut().push(ctx.cc(i));
+            cc2.v.borrow_mut().push(ctx.cc(i));
+        }
+
+        assert_eq!(ctx.bytes_allocated(), 2288);
+        assert_eq!(ctx.gc_threshold(), 3024);
+
+        std::mem::drop(cc1);
+        std::mem::drop(cc2);
+
+        assert_eq!(ctx.number_of_roots_buffered(), 2);
+
+        let mut v = Vec::new();
+        for i in 0..20 {
+            v.push(ctx.cc(i));
+        }
+
+        assert_eq!(ctx.number_of_roots_buffered(), 0);
+
+        assert_eq!(ctx.bytes_allocated(), 800);
+        assert_eq!(ctx.gc_threshold(), 1520);
+    }
 
     #[test]
     #[should_panic]
