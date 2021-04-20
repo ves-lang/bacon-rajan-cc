@@ -58,10 +58,16 @@ impl CcContext {
         }
     }
 
-    /// Allocates a new `Cc` in this
+    /// Allocates a new `Cc` in this context.
     #[inline]
     pub fn cc<T: Trace>(&self, obj: T) -> Cc<T> {
         Cc::new(self.inner.clone(), obj)
+    }
+
+    /// Returns the nubmer of references to the context.
+    #[inline]
+    pub fn n_context_refs(&self) -> usize {
+        Ptr::strong_count(&self.inner)
     }
 
     /// Creates a new `Cc<T>`, with the `Default` value for `T`.
