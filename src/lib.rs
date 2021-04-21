@@ -207,6 +207,26 @@ impl<T: Trace> Cc<T> {
         Weak { _ptr: self._ptr }
     }
 
+    /// Compares the inners pointers of the given [`Cc`]s.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use bacon_rajan_cc::{Cc, CcContext};
+    ///
+    /// let ctx = CcContext::new();
+    /// let five = ctx.cc(5);
+    /// let cloned_five = five.clone();
+    /// let another_five = ctx.cc(5);
+    ///
+    /// assert!(five.same_allocation(&cloned_five));
+    /// assert!(!five.same_allocation(&another_five));
+    /// ```
+    #[inline]
+    pub fn same_allocation(&self, other: &Cc<T>) -> bool {
+        self._ptr == other._ptr
+    }
+
     /// Constructs a new Cc from the given raw `CcBox` pointer. This function must be called once and only once per every leaked `CcBox`.
     ///
     /// # Safety
