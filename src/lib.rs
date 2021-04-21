@@ -261,8 +261,9 @@ impl<T: Trace> Cc<T> {
         this._ptr
     }
 
-    /// Returns a mutable reference to the managed value. The caller must ensure
-    /// that there are no other mutable references to the same value.
+    /// Returns a mutable reference to the managed value.
+    /// # Safety
+    /// The caller must ensure that there are no other mutable references to the same value.
     /// Reminder: aliasing a mutable reference is Undefined Behavior since the language semantics
     /// and the optimizer heavily rely on the fact that mutable references are never aliased.
     #[inline]
@@ -1491,5 +1492,41 @@ mod tests {
         }
         ctx.collect_cycles();
         assert_eq!(count.get(), 0);
+    }
+
+    #[test]
+    fn test_double_indirection_doesnt_leak() {
+        #[derive(Debug, Clone)]
+        struct S {
+            ty: Cc<Cc<T>>,
+        }
+
+        #[derive(Debug)]
+        struct T {
+            value: i32,
+        }
+
+        impl std::ops::Drop for T {
+            fn drop(&mut self) {
+                println!("dropping T");
+            }
+        }
+
+        impl Trace for T {
+            fn trace(&self, tracer: &mut Tracer) {
+                println!("tracing T");
+                self.value.trace(tracer);
+            }
+        }
+        let heap = CcContext::new();
+        let ty = heap.cc(T { value: 5 });
+        drop(ty.clone());
+        let s = S { ty: heap.cc(ty) };
+        drop(s.ty.clone());
+
+        //heap.collect_cycles();
+        std::mem::drop(s);
+        println!("{}", heap.number_of_roots_buffered());
+        heap.collect_cycles();
     }
 }

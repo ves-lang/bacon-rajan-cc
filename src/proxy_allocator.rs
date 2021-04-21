@@ -9,7 +9,7 @@ use std::sync::{
 /// A proxy allocator returned by a [`CcContext`]. Allocating and deallocating memory with this allocator
 /// will be visible to the context, allowing it to perform cycle collection if the memory usage exceeds some threshold.
 /// This allocator is thread-safe.
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone)]
 pub struct ProxyAllocator(Arc<AtomicUsize>);
 
 #[allow(unused)]
